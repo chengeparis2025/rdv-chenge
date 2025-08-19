@@ -1,0 +1,171 @@
+const express = require('express');
+const bodyParser = require('body-parser');
+const nodemailer = require('nodemailer');
+const path = require('path');
+
+const app = express();
+const port = process.env.PORT || 3000;
+const adminPassword = process.env.ADMIN_PASSWORD || 'changeme';
+
+// Configure nodemailer transporter using environment variables
+const transporter = nodemailer.createTransport({
+  host: process.env.SMTP_HOST,
+  port: parseInt(process.env.SMTP_PORT || "587"),
+  secure: process.env.SMTP_SECURE === 'true',
+  auth: {
+    user: process.env.SMTP_USER,
+    pass: process.env.SMTP_PASS,
+  },
+});
+
+// Email address to notify when a reservation is made
+const adminEmail = process.env.ADMIN_EMAIL;
+
+// In-memory data storage (to be replaced with a database in production)
+const reservations = [];
+const blockedSlots = [];
+
+// Middleware to parse JSON bodies
+app.use(bodyParser.json());
+
+// Serve static files from the public directory
+app.use(express.static('public'));
+
+// Generate time slots from Monday to Friday, 10h to 19h
+function generateTimeSlots(date) {
+  const slots = [];
+  const dayOfWeek = date.getDay(); // 0=Sunday, 1=Monday, ..., 6=Saturday
+  if (dayOfWeek === 0 || dayOfWeek === 6) {
+    return slots; // No slots on weekends
+  }
+  for (let hour = 10; hour < 19; hour++) {
+    const start = new Date(date);
+    start.setHours(hour, 0, 0, 0);
+    const end = new Date(date);
+    end.setHours(hour + 1, 0, 0, 0);
+    slots.push({ start, end });
+  }
+  return slots;
+}
+
+// Endpoint to get available slots for a given date (YYYY-MM-DD)
+app.get('/api/slots', (req, res) => {
+  const { date } = req.query;
+  if (!date) {
+    return res.status(400).json({ error: 'Date manquante' });
+  }
+  const selectedDate = new Date(date);
+  const slots = generateTimeSlots(selectedDate);
+  const available = slots.filter(slot => {
+    const isBlocked = blockedSlots.some(b => b.start.getTime() === slot.start.getTime());
+    const isReserved = reservations.some(r => r.start.getTime() === slot.start.getTime());
+    return !isBlocked && !isReserved;
+  });
+  res.json(available.map(slot => ({
+    start: slot.start.toISOString(),
+    end: slot.end.toISOString(),
+  })));
+});
+
+// Endpoint to list all reservations (admin only)
+app.get('/api/reservations', (req, res) => {
+  const key = req.headers['x-admin-key'];
+  if (key !== adminPassword) {
+    return res.status(401).json({ error: 'Accès refusé' });
+  }
+  res.json(reservations.map(r => ({
+    start: r.start.toISOString(),
+    end: r.end.toISOString(),
+    name: r.name,
+    prenom: r.prenom,
+    adresse: r.adresse,
+    telephone: r.telephone,
+  })));
+});
+
+// Endpoint to list all blocked slots (admin only)
+app.get('/api/blocked', (req, res) => {
+  const key = req.headers['x-admin-key'];
+  if (key !== adminPassword) {
+    return res.status(401).json({ error: 'Accès refusé' });
+  }
+  res.json(blockedSlots.map(b => ({
+    start: b.start.toISOString(),
+    end: b.end.toISOString(),
+  })));
+});
+
+// Endpoint to create a reservation
+app.post('/api/reservations', (req, res) => {
+  const { date, start, name, prenom, adresse, telephone } = req.body;
+  if (!date || !start || !name || !prenom || !adresse || !telephone) {
+    return res.status(400).json({ error: 'Informations manquantes' });
+  }
+  const slotStart = new Date(start);
+  const slotEnd = new Date(slotStart.getTime() + 60 * 60 * 1000);
+  // Prevent booking the day before for the next day
+  const now = new Date();
+  const dayDiff = Math.floor((slotStart - now) / (24 * 60 * 60 * 1000));
+  if (dayDiff <= 1) {
+    return res.status(400).json({ error: 'Réservation impossible la veille pour le lendemain' });
+  }
+  // Check if slot is blocked or reserved
+  const isBlocked = blockedSlots.some(b => b.start.getTime() === slotStart.getTime());
+  const isReserved = reservations.some(r => r.start.getTime() === slotStart.getTime());
+  if (isBlocked || isReserved) {
+    return res.status(400).json({ error: 'Créneau indisponible' });
+  }
+  // Save reservation
+  const reservation = { start: slotStart, end: slotEnd, name, prenom, adresse, telephone };
+  reservations.push(reservation);
+  // Send notification email if adminEmail and SMTP config are defined
+  if (adminEmail && process.env.SMTP_HOST) {
+    const mailOptions = {
+      from: process.env.SMTP_USER,
+      to: adminEmail,
+      subject: 'Nouvelle réservation',
+      text: `Une nouvelle réservation a été effectuée:\nDate: ${date}\nHeure de début: ${slotStart.toLocaleString()}\nHeure de fin: ${slotEnd.toLocaleString()}\nNom: ${name}\nPrénom: ${prenom}\nAdresse: ${adresse}\nTéléphone: ${telephone}\n`,
+    };
+    transporter.sendMail(mailOptions).catch((err) => {
+      console.error('Erreur lors de l\'envoi de l\'email:', err);
+    });
+  }
+  res.json({ message: 'Réservation confirmée' });
+});
+
+// Endpoint to block a slot (admin only)
+app.post('/api/block', (req, res) => {
+  const { start } = req.body;
+  const key = req.headers['x-admin-key'];
+  if (key !== adminPassword) {
+    return res.status(401).json({ error: 'Accès refusé' });
+  }
+  const slotStart = new Date(start);
+  blockedSlots.push({ start: slotStart, end: new Date(slotStart.getTime() + 60 * 60 * 1000) });
+  res.json({ message: 'Créneau bloqué' });
+});
+
+// Endpoint to unblock a slot (admin only)
+app.post('/api/unblock', (req, res) => {
+  const { start } = req.body;
+  const key = req.headers['x-admin-key'];
+  if (key !== adminPassword) {
+    return res.status(401).json({ error: 'Accès refusé' });
+  }
+  const slotStart = new Date(start);
+  const index = blockedSlots.findIndex(b => b.start.getTime() === slotStart.getTime());
+  if (index !== -1) {
+    blockedSlots.splice(index, 1);
+  }
+  res.json({ message: 'Créneau débloqué' });
+});
+
+// Serve the admin page
+app.get('/admin', (req, res) => {
+  res.sendFile(path.join(__dirname, 'public', 'admin.html'));
+});
+
+// Start the server
+app.listen(port, () => {
+  console.log(`Serveur lancé sur le port ${port}`);
+});
