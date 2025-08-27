@@ -3,7 +3,7 @@
 <head>
   <meta charset="UTF-8">
   <meta name="viewport" content="width=device-width, initial-scale=1.0">
-  <title>Prendre rendez-vous - Chenge</title>
+  <title>Prendre rendez‑vous – Chenge</title>
   <style>
     body {
       font-family: Arial, sans-serif;
@@ -17,11 +17,14 @@
       background: #fff;
       padding: 20px;
       border-radius: 8px;
-      box-shadow: 0 2px 5px rgba(0,0,0,0.1);
+      box-shadow: 0 2px 5px rgba(0, 0, 0, 0.1);
     }
     h1, h2 {
       text-align: center;
       color: #333;
+    }
+    p {
+      margin-top: 0;
     }
     label {
       display: block;
@@ -29,6 +32,7 @@
     }
     input[type="text"],
     input[type="tel"],
+    input[type="email"],
     input[type="date"] {
       width: 100%;
       padding: 8px;
@@ -68,35 +72,50 @@
   <div class="container">
     <h1>Chenge</h1>
     <h2>Prendre rendez‑vous</h2>
-    <label for="date">Sélectionnez une date :</label>
+    <p>Choisissez un créneau de 4 heures. Le coursier peut passer à tout moment dans cette plage, soyez donc disponible pendant toute la durée.</p>
+    <label for="date">Sélectionnez une date (mardi au samedi)&nbsp;:</label>
     <input type="date" id="date" name="date" />
     <div class="slots" id="slots"></div>
-    <label for="nom">Nom :</label>
+    <label for="nom">Nom&nbsp;:</label>
     <input type="text" id="nom" name="nom" />
-    <label for="prenom">Prénom :</label>
+    <label for="prenom">Prénom&nbsp;:</label>
     <input type="text" id="prenom" name="prenom" />
-    <label for="adresse">Adresse postale :</label>
+    <label for="adresse">Adresse postale&nbsp;:</label>
     <input type="text" id="adresse" name="adresse" />
-    <label for="telephone">Téléphone :</label>
+    <label for="telephone">Téléphone&nbsp;:</label>
     <input type="tel" id="telephone" name="telephone" />
+    <label for="email">Adresse e‑mail&nbsp;:</label>
+    <input type="email" id="email" name="email" />
     <button id="submit">Réserver</button>
     <div id="message"></div>
   </div>
   <script>
-    // Vérifie si la date est un jour de semaine (lundi-vendredi)
-    function isWeekday(date) {
-      const day = date.getDay();
-      return day >= 1 && day <= 5;
-    }
+    // Initialise la date minimum (deux jours à l'avance)
     const dateInput = document.getElementById('date');
+    const today = new Date();
+    today.setDate(today.getDate() + 2);
+    dateInput.min = today.toISOString().split('T')[0];
+
     const slotsDiv = document.getElementById('slots');
     const submitBtn = document.getElementById('submit');
+
+    // Fonction pour vérifier si la date sélectionnée est entre mardi (2) et samedi (6)
+    function isValidDay(date) {
+      const day = date.getDay();
+      return day >= 2 && day <= 6;
+    }
+
     dateInput.addEventListener('change', () => {
       const selectedValue = dateInput.value;
+      const messageDiv = document.getElementById('message');
+      messageDiv.textContent = '';
+      if (!selectedValue) {
+        slotsDiv.innerHTML = '';
+        return;
+      }
       const date = new Date(selectedValue);
-      document.getElementById('message').textContent = '';
-      if (!selectedValue || !isWeekday(date)) {
-        slotsDiv.innerHTML = '<p>Pas de créneaux le week‑end.</p>';
+      if (!isValidDay(date)) {
+        slotsDiv.innerHTML = '<p>Veuillez choisir une date du mardi au samedi.</p>';
         return;
       }
       slotsDiv.innerHTML = '<p>Chargement des créneaux...</p>';
@@ -106,7 +125,7 @@
           if (!data || data.length === 0) {
             slotsDiv.innerHTML = '<p>Aucun créneau disponible.</p>';
           } else {
-            let html = '<p>Choisissez un créneau :</p>';
+            let html = '<p>Choisissez un créneau de 4 h&nbsp;:</p>';
             data.forEach((slot, idx) => {
               const start = new Date(slot.start);
               const end = new Date(slot.end);
@@ -130,18 +149,17 @@
           }
         })
         .catch(() => {
-          slotsDiv.innerHTML =
-            '<p>Erreur lors du chargement des créneaux.</p>';
+          slotsDiv.innerHTML = '<p>Erreur lors du chargement des créneaux.</p>';
         });
     });
+
     submitBtn.addEventListener('click', () => {
-      const selectedSlot = document.querySelector(
-        'input[name="slot"]:checked'
-      );
+      const selectedSlot = document.querySelector('input[name="slot"]:checked');
       const nom = document.getElementById('nom').value.trim();
       const prenom = document.getElementById('prenom').value.trim();
       const adresse = document.getElementById('adresse').value.trim();
       const telephone = document.getElementById('telephone').value.trim();
+      const email = document.getElementById('email').value.trim();
       const messageDiv = document.getElementById('message');
       messageDiv.textContent = '';
       if (
@@ -150,7 +168,8 @@
         !nom ||
         !prenom ||
         !adresse ||
-        !telephone
+        !telephone ||
+        !email
       ) {
         messageDiv.textContent =
           'Merci de remplir tous les champs et de choisir un créneau.';
@@ -164,6 +183,7 @@
         prenom: prenom,
         adresse: adresse,
         telephone: telephone,
+        email: email,
       };
       submitBtn.disabled = true;
       fetch('/api/reservations', {

@@ -1,124 +1,261 @@
 <!DOCTYPE html>
 <html lang="fr">
 <head>
-<meta charset="UTF-8">
-<title>Administration – Chenge</title>
+  <meta charset="UTF-8">
+  <title>Administration – Chenge</title>
+  <style>
+    body {
+      font-family: Arial, sans-serif;
+      margin: 20px;
+    }
+    table {
+      border-collapse: collapse;
+      width: 100%;
+      margin-top: 10px;
+    }
+    th, td {
+      border: 1px solid #ccc;
+      padding: 8px;
+      text-align: left;
+    }
+    th {
+      background: #f0f0f0;
+    }
+    label {
+      display: inline-block;
+      margin-top: 10px;
+    }
+    input {
+      margin-top: 5px;
+    }
+    button {
+      margin-left: 5px;
+      padding: 5px 10px;
+    }
+    h2 {
+      margin-top: 30px;
+    }
+  </style>
 </head>
 <body>
-<h1>Administration – Chenge</h1>
-<label>Clé admin: <input type="password" id="adminKey"></label>
-<button onclick="refresh()">Actualiser</button>
+  <h1>Administration – Chenge</h1>
+  <label>Clé admin :
+    <input type="password" id="adminKey">
+  </label>
+  <button onclick="refresh()">Actualiser</button>
 
-<h2>Réservations</h2>
-<table id="reservationsTable" border="1">
-<thead><tr><th>Début</th><th>Fin</th><th>Nom</th><th>Prénom</th><th>Adresse</th><th>Téléphone</th></tr></thead>
-<tbody></tbody>
-</table>
+  <h2>Réservations</h2>
+  <table id="reservationsTable">
+    <thead>
+      <tr>
+        <th>Début</th>
+        <th>Fin</th>
+        <th>Nom</th>
+        <th>Prénom</th>
+        <th>Adresse</th>
+        <th>Téléphone</th>
+        <th>E‑mail</th>
+      </tr>
+    </thead>
+    <tbody></tbody>
+  </table>
 
-<h2>Créneaux bloqués</h2>
-<table id="blockedTable" border="1">
-<thead><tr><th>Début</th><th>Fin</th></tr></thead>
-<tbody></tbody>
-</table>
+  <h2>Créneaux bloqués</h2>
+  <table id="blockedTable">
+    <thead>
+      <tr><th>Début</th><th>Fin</th></tr>
+    </thead>
+    <tbody></tbody>
+  </table>
 
-<h2>Bloquer un créneau</h2>
-<label>Date et heure de début:
-<input type="datetime-local" id="blockStart">
-</label>
-<button onclick="blockSlot()">Bloquer</button>
+  <h2>Bloquer un créneau</h2>
+  <label>Début&nbsp;:
+    <input type="datetime-local" id="blockStart">
+  </label>
+  <button onclick="blockSlot()">Bloquer</button>
 
-<h2>Débloquer un créneau</h2>
-<label>Date et heure de début:
-<input type="datetime-local" id="unblockStart">
-</label>
-<button onclick="unblockSlot()">Débloquer</button>
+  <h2>Débloquer un créneau</h2>
+  <label>Début&nbsp;:
+    <input type="datetime-local" id="unblockStart">
+  </label>
+  <button onclick="unblockSlot()">Débloquer</button>
 
-<script>
-async function refresh() {
-  const key = document.getElementById('adminKey').value;
-  await fetchReservations(key);
-  await fetchBlocked(key);
-}
+  <h2>Bloquer une plage horaire</h2>
+  <label>De&nbsp;:
+    <input type="datetime-local" id="rangeStart">
+  </label>
+  <label>À&nbsp;:
+    <input type="datetime-local" id="rangeEnd">
+  </label>
+  <button onclick="blockRange()">Bloquer plage</button>
 
-async function fetchReservations(key) {
-  const res = await fetch('/api/reservations', { headers: { 'x-admin-key': key }});
-  const data = await res.json();
-  const tbody = document.getElementById('reservationsTable').querySelector('tbody');
-  tbody.innerHTML = '';
-  if (Array.isArray(data)) {
-    data.forEach(r => {
-      const tr = document.createElement('tr');
-      tr.innerHTML = `<td>${new Date(r.start).toLocaleString()}</td>
-                      <td>${new Date(r.end).toLocaleString()}</td>
-                      <td>${r.name}</td>
-                      <td>${r.prenom}</td>
-                      <td>${r.adresse}</td>
-                      <td>${r.telephone}</td>`;
-      tbody.appendChild(tr);
-    });
-  } else {
-    alert(data.error || 'Erreur lors du chargement des réservations');
-  }
-}
+  <h2>Bloquer une journée entière</h2>
+  <label>Date&nbsp;:
+    <input type="date" id="blockDayDate">
+  </label>
+  <button onclick="blockDay()">Bloquer la journée</button>
 
-async function fetchBlocked(key) {
-  const res = await fetch('/api/blocked', { headers: { 'x-admin-key': key }});
-  const data = await res.json();
-  const tbody = document.getElementById('blockedTable').querySelector('tbody');
-  tbody.innerHTML = '';
-  if (Array.isArray(data)) {
-    data.forEach(b => {
-      const tr = document.createElement('tr');
-      tr.innerHTML = `<td>${new Date(b.start).toLocaleString()}</td>
-                      <td>${new Date(b.end).toLocaleString()}</td>`;
-      tbody.appendChild(tr);
-    });
-  } else {
-    alert(data.error || 'Erreur lors du chargement des créneaux bloqués');
-  }
-}
+  <h2>Bloquer une période de dates</h2>
+  <label>Du&nbsp;:
+    <input type="date" id="rangeStartDate">
+  </label>
+  <label>Au&nbsp;:
+    <input type="date" id="rangeEndDate">
+  </label>
+  <button onclick="blockDateRange()">Bloquer la période</button>
 
-async function blockSlot() {
-  const key = document.getElementById('adminKey').value;
-  const start = document.getElementById('blockStart').value;
-  if (!start) { alert('Choisissez un début'); return; }
-  const res = await fetch('/api/block', {
-    method: 'POST',
-    headers: {
-      'Content-Type': 'application/json',
-      'x-admin-key': key
-    },
-    body: JSON.stringify({ start })
-  });
-  const data = await res.json();
-  if (data.message) {
-    alert(data.message);
-    refresh();
-  } else {
-    alert(data.error || 'Erreur lors du blocage');
-  }
-}
+  <script>
+    async function refresh() {
+      const key = document.getElementById('adminKey').value;
+      await fetchReservations(key);
+      await fetchBlocked(key);
+    }
 
-async function unblockSlot() {
-  const key = document.getElementById('adminKey').value;
-  const start = document.getElementById('unblockStart').value;
-  if (!start) { alert('Choisissez un début'); return; }
-  const res = await fetch('/api/unblock', {
-    method: 'POST',
-    headers: {
-      'Content-Type': 'application/json',
-      'x-admin-key': key
-    },
-    body: JSON.stringify({ start })
-  });
-  const data = await res.json();
-  if (data.message) {
-    alert(data.message);
-    refresh();
-  } else {
-    alert(data.error || 'Erreur lors du déblocage');
-  }
-}
-</script>
+    async function fetchReservations(key) {
+      const res = await fetch('/api/reservations', { headers: { 'x-admin-key': key }});
+      const data = await res.json();
+      const tbody = document.getElementById('reservationsTable').querySelector('tbody');
+      tbody.innerHTML = '';
+      if (Array.isArray(data)) {
+        data.forEach(r => {
+          const tr = document.createElement('tr');
+          tr.innerHTML = '<td>' + new Date(r.start).toLocaleString() + '</td>' +
+                         '<td>' + new Date(r.end).toLocaleString() + '</td>' +
+                         '<td>' + r.name + '</td>' +
+                         '<td>' + r.prenom + '</td>' +
+                         '<td>' + r.adresse + '</td>' +
+                         '<td>' + r.telephone + '</td>' +
+                         '<td>' + (r.email || '') + '</td>';
+          tbody.appendChild(tr);
+        });
+      } else {
+        alert(data.error || 'Erreur lors du chargement des réservations');
+      }
+    }
+
+    async function fetchBlocked(key) {
+      const res = await fetch('/api/blocked', { headers: { 'x-admin-key': key }});
+      const data = await res.json();
+      const tbody = document.getElementById('blockedTable').querySelector('tbody');
+      tbody.innerHTML = '';
+      if (Array.isArray(data)) {
+        data.forEach(b => {
+          const tr = document.createElement('tr');
+          tr.innerHTML = '<td>' + new Date(b.start).toLocaleString() + '</td>' +
+                         '<td>' + new Date(b.end).toLocaleString() + '</td>';
+          tbody.appendChild(tr);
+        });
+      } else {
+        alert(data.error || 'Erreur lors du chargement des créneaux bloqués');
+      }
+    }
+
+    async function blockSlot() {
+      const key = document.getElementById('adminKey').value;
+      const start = document.getElementById('blockStart').value;
+      if (!start) { alert('Choisissez un début'); return; }
+      const res = await fetch('/api/block', {
+        method: 'POST',
+        headers: {
+          'Content-Type': 'application/json',
+          'x-admin-key': key
+        },
+        body: JSON.stringify({ start })
+      });
+      const data = await res.json();
+      if (data.message) {
+        alert(data.message);
+        refresh();
+      } else {
+        alert(data.error || 'Erreur lors du blocage');
+      }
+    }
+
+    async function unblockSlot() {
+      const key = document.getElementById('adminKey').value;
+      const start = document.getElementById('unblockStart').value;
+      if (!start) { alert('Choisissez un début'); return; }
+      const res = await fetch('/api/unblock', {
+        method: 'POST',
+        headers: {
+          'Content-Type': 'application/json',
+          'x-admin-key': key
+        },
+        body: JSON.stringify({ start })
+      });
+      const data = await res.json();
+      if (data.message) {
+        alert(data.message);
+        refresh();
+      } else {
+        alert(data.error || 'Erreur lors du déblocage');
+      }
+    }
+
+    async function blockRange() {
+      const key = document.getElementById('adminKey').value;
+      const start = document.getElementById('rangeStart').value;
+      const end = document.getElementById('rangeEnd').value;
+      if (!start || !end) { alert('Choisissez un début et une fin'); return; }
+      const res = await fetch('/api/block-range', {
+        method: 'POST',
+        headers: {
+          'Content-Type': 'application/json',
+          'x-admin-key': key
+        },
+        body: JSON.stringify({ start, end })
+      });
+      const data = await res.json();
+      if (data.message) {
+        alert(data.message);
+        refresh();
+      } else {
+        alert(data.error || 'Erreur lors du blocage de la plage');
+      }
+    }
+
+    async function blockDay() {
+      const key = document.getElementById('adminKey').value;
+      const date = document.getElementById('blockDayDate').value;
+      if (!date) { alert('Choisissez une date'); return; }
+      const res = await fetch('/api/block-day', {
+        method: 'POST',
+        headers: {
+          'Content-Type': 'application/json',
+          'x-admin-key': key
+        },
+        body: JSON.stringify({ date })
+      });
+      const data = await res.json();
+      if (data.message) {
+        alert(data.message);
+        refresh();
+      } else {
+        alert(data.error || 'Erreur lors du blocage de la journée');
+      }
+    }
+
+    async function blockDateRange() {
+      const key = document.getElementById('adminKey').value;
+      const startDate = document.getElementById('rangeStartDate').value;
+      const endDate = document.getElementById('rangeEndDate').value;
+      if (!startDate || !endDate) { alert('Choisissez une date de début et de fin'); return; }
+      const res = await fetch('/api/block-date-range', {
+        method: 'POST',
+        headers: {
+          'Content-Type': 'application/json',
+          'x-admin-key': key
+        },
+        body: JSON.stringify({ startDate, endDate })
+      });
+      const data = await res.json();
+      if (data.message) {
+        alert(data.message);
+        refresh();
+      } else {
+        alert(data.error || 'Erreur lors du blocage de la période');
+      }
+    }
+  </script>
 </body>
 </html>
