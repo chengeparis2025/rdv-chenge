@@ -1,9 +1,9 @@
 {
   "name": "rdv-chenge",
   "version": "1.0.0",
-  "main": "server-email.js",
+  "main": "server-schedule.js",
   "scripts": {
-    "start": "node server-email.js"
+    "start": "node server-schedule.js"
   },
   "dependencies": {
     "express": "^4.18.2",
